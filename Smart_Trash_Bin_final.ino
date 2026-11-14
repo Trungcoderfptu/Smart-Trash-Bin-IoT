@@ -25,7 +25,7 @@ const int ldrPin = A1;
 // ==========================================
 
 Servo lidServo;
-LiquidCrystal_I2C lcd(0x27, 20, 4);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 // ==========================================
 // 3. CAU HINH
@@ -470,28 +470,25 @@ void updateLCD(unsigned long now) {
   lastLcdTime = now;
   lcd.setCursor(0, 0);
   if (mode == 1) {
-    lcd.print("TRASH BIN FULL      ");
+    lcd.print("FULL! R:");
   } else {
-    lcd.print("SYSTEM NORMAL       ");
+    lcd.print("NORM  R:");
   }
-  lcd.setCursor(0, 1);
-  lcd.print("Trash: ");
   lcd.print(trashPercent);
-  lcd.print("%              ");
-  lcd.setCursor(0, 2);
-  lcd.print("Lid: ");
+  lcd.print("%    ");
+
+  lcd.setCursor(0, 1);
   if (isLidOpen) {
-    lcd.print("OPEN            ");
+    lcd.print("Lid:OPN ");
   } else {
-    lcd.print("CLOSED          ");
+    lcd.print("Lid:CLS ");
   }
-  lcd.setCursor(0, 3);
   if (!allowOpen) {
-    lcd.print("Waiting clear...    ");
+    lcd.print("Wait    ");
   } else if (personDetected) {
-    lcd.print("Person detected     ");
+    lcd.print("Detect  ");
   } else {
-    lcd.print("Ready               ");
+    lcd.print("Ready   ");
   }
 }
 
@@ -540,9 +537,9 @@ void setup() {
   lcd.init();
   lcd.backlight();
   lcd.setCursor(0, 0);
-  lcd.print("SMART TRASH BIN     ");
+  lcd.print("SMART TRASH BIN ");
   lcd.setCursor(0, 1);
-  lcd.print("SYSTEM STARTING...  ");
+  lcd.print("STARTING...     ");
   digitalWrite(buzzerPin, LOW);
   digitalWrite(ledRed, LOW);
   digitalWrite(ledWhiteOut, LOW);
