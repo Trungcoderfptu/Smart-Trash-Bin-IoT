@@ -184,15 +184,6 @@ void openLid() {
 }
 
 // ==========================================
-// 8B. HAM RESET TRANG THAI NGUOI
-// ==========================================
-void resetPersonState() {
-  personDetected = false;
-  personCount = 0;
-  personClearCount = 0;
-}
-
-// ==========================================
 // 9. HAM DONG NAP THUNG RAC
 // ==========================================
 void closeLid() {
@@ -203,11 +194,11 @@ void closeLid() {
   digitalWrite(ledWhiteIn, LOW);
   isLidOpen = false;
   waitingToClose = false;
+  personDetected = false;
+  personCount = 0;
+  personClearCount = 0;
   allowOpen = false;
   lastLidClosedTime = millis();
-
-  resetPersonState();
-
   personSamples[0] = 999;
   personSamples[1] = 999;
   personSamples[2] = 999;
@@ -215,36 +206,64 @@ void closeLid() {
   Serial.println("LID CLOSED - LOCKED");
 }
 
-// ==========================================
-// 10A. HAM XU LY KHI NAP DANG BI KHOA
-// ==========================================
-void processLockedState(int distance, unsigned long now) {
-  if (distance < 999) {
-    personDistance = distance;
-  }
-  bool clearNow = (distance >= 999) || (distance >= personReleaseDist);
-  if (clearNow) {
-    personClearCount++;
-  } else {
-    personClearCount = 0;
-  }
-  if (personClearCount >= PERSON_CLEAR_COUNT || now - lastLidClosedTime >= unlockTimeout) {
-    allowOpen = true;
-    resetPersonState();
-    for (int i = 0; i < 3; i++) {
-      personSamples[i] = distance;
-    }
-    filteredPersonDistance = distance;
-    lastPersonValidTime = now;
-    Serial.println("SENSOR CLEAR - OPEN ENABLED");
-  }
-}
 
 // ==========================================
-// 10B. HAM XU LY CHONG RUNG PHAT HIEN NGUOI
+// 10. HAM DOC CAM BIEN NGUOI
 // ==========================================
-void evaluatePersonPresence(int filteredDist) {
-  if (filteredDist <= detectPersonDist) {
+void readPersonDistance() {
+  int distance = readDistance(trigLid, echoLid);
+  unsigned long now = millis();
+  if (!allowOpen) {
+    if (distance < 999) {
+      personDistance = distance;
+    }
+    bool clearNow = (distance >= 999) || (distance >= personReleaseDist);
+    if (clearNow) {
+      personClearCount++;
+    } else {
+      personClearCount = 0;
+    }
+    if (personClearCount >= PERSON_CLEAR_COUNT || now - lastLidClosedTime >= unlockTimeout) {
+      allowOpen = true;
+      personDetected = false;
+      personCount = 0;
+      personClearCount = 0;
+      for (int i = 0; i < 3; i++) {
+        personSamples[i] = distance;
+      }
+      filteredPersonDistance = distance;
+      lastPersonValidTime = now;
+      Serial.println("SENSOR CLEAR - OPEN ENABLED");
+    }
+    return;
+  }
+  if (distance < 3 || distance >= 999) {
+    if (now - lastPersonValidTime >= personInvalidTimeout) {
+      personDetected = false;
+      personCount = 0;
+      personClearCount = 0;
+    }
+    return;
+  }
+  personDistance = distance;
+  lastPersonValidTime = now;
+  personSamples[sampleIndex] = distance;
+  sampleIndex++;
+  if (sampleIndex >= 3) {
+    sampleIndex = 0;
+  }
+  for (int i = 0; i < 3; i++) {
+    if (personSamples[i] == 999) {
+      filteredPersonDistance = 999;
+      return;
+    }
+  }
+  filteredPersonDistance = getMedianDistance(
+    personSamples[0],
+    personSamples[1],
+    personSamples[2]);
+
+  if (filteredPersonDistance <= detectPersonDist) {
     personCount++;
     personClearCount = 0;
     if (personCount >= PERSON_DETECT_COUNT) {
@@ -253,7 +272,7 @@ void evaluatePersonPresence(int filteredDist) {
       }
       personDetected = true;
     }
-  } else if (filteredDist >= personReleaseDist) {
+  } else if (filteredPersonDistance >= personReleaseDist) {
     personClearCount++;
     personCount = 0;
     if (personClearCount >= PERSON_CLEAR_COUNT) {
@@ -264,50 +283,6 @@ void evaluatePersonPresence(int filteredDist) {
     }
   }
 }
-
-// ==========================================
-// 10. HAM DOC CAM BIEN NGUOI
-// ==========================================
-void readPersonDistance() {
-  int distance = readDistance(trigLid, echoLid);
-  unsigned long now = millis();
-
-  if (!allowOpen) {
-    processLockedState(distance, now);
-    return;
-  }
-
-  if (distance < 3 || distance >= 999) {
-    if (now - lastPersonValidTime >= personInvalidTimeout) {
-      resetPersonState();
-    }
-    return;
-  }
-
-  personDistance = distance;
-  lastPersonValidTime = now;
-  personSamples[sampleIndex] = distance;
-  sampleIndex++;
-
-  if (sampleIndex >= 3) {
-    sampleIndex = 0;
-  }
-
-  for (int i = 0; i < 3; i++) {
-    if (personSamples[i] == 999) {
-      filteredPersonDistance = 999;
-      return;
-    }
-  }
-
-  filteredPersonDistance = getMedianDistance(
-    personSamples[0],
-    personSamples[1],
-    personSamples[2]);
-
-  evaluatePersonPresence(filteredPersonDistance);
-}
-
 // ==========================================
 // 11. HAM DOC CAM BIEN DO MUC RAC
 // ==========================================
