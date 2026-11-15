@@ -25,7 +25,7 @@ const int ldrPin = A1;
 // ==========================================
 
 Servo lidServo;
-LiquidCrystal_I2C lcd(0x27, 16, 2);
+LiquidCrystal_I2C lcd(0x27, 16, 2);  // LCD 16x2 I2C
 
 // ==========================================
 // 3. CAU HINH
@@ -33,9 +33,10 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 int LID_CLOSED_ANGLE = 90;
 int LID_OPEN_ANGLE = 180;
 
-const int EMPTY_TRASH_DIST = 18;      // chieu cao thung rac max
-const int FULL_TRASH_DIST = 2;        // chieu cao thung rac min
-const int TRASH_EMPTY_TOLERANCE = 1;  // Sai so cho phep khi thung rong
+
+const int EMPTY_TRASH_DIST = 18;
+const int FULL_TRASH_DIST = 2;
+const int TRASH_EMPTY_TOLERANCE = 1;
 
 const int detectPersonDist = 25;   // khoang cach nguoi den gan min
 const int personReleaseDist = 30;  // khoang cach nguoi den gan max
@@ -50,7 +51,7 @@ const int fullOn = 90;
 const int fullOff = 85;
 
 const unsigned long closeDelay = 2000;      // thoi gian dong khi khong co nguoi
-const unsigned long unlockTimeout = 3000;   // Thoi gain thung rac khoa sau khi dong
+const unsigned long unlockTimeout = 3000;   // sau khi dong nap, toi da khoa bao lau (ms) thi tu mo khoa
 const unsigned long reopenLockTime = 1000;  // khi khong co nguoi khoa chuc nang mo nap x mili seccon
 
 const unsigned long sensorInterval = 80;
@@ -108,6 +109,7 @@ unsigned long lastLcdTime = 0;
 unsigned long lastDebugTime = 0;
 
 bool buzzerState = false;
+
 bool lcdNeedReinit = false;
 unsigned long lcdReinitTime = 0;
 unsigned long lastLcdReinit = 0;
@@ -115,54 +117,72 @@ unsigned long lastLcdReinit = 0;
 // ==========================================
 // 5. HAM DOC CAM BIEN KHOANG CACH SIEU AM
 // ==========================================
+
 int readDistance(int trigPin, int echoPin) {
+
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
+
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
+
   long duration = pulseIn(echoPin, HIGH, 25000);
+
   if (duration == 0) {
     return 999;
   }
+
   int distance = duration * 0.034 / 2;
+
   if (distance < 2 || distance > 400) {
     return 999;
   }
+
   return distance;
 }
 
 // ==========================================
 // 6. HAM LOC NHIEU TRUNG VI 3 LAN DO
 // ==========================================
+
 int getMedianDistance(int a, int b, int c) {
+
   if (a > b) {
     int temp = a;
     a = b;
     b = temp;
   }
+
   if (b > c) {
     int temp = b;
     b = c;
     c = temp;
   }
+
   if (a > b) {
     int temp = a;
     a = b;
     b = temp;
   }
+
   return b;
 }
 
 // ==========================================
 // 7. HAM KHOI TAO LAI LCD (PHUC HOI I2C)
 // ==========================================
+
 void reinitLCD() {
+
   lcd.init();
   lcd.backlight();
+
   lastLcdTime = 0;
 }
+
 void requestLcdReinit() {
+
   lcdNeedReinit = true;
   lcdReinitTime = millis();
 }
@@ -170,39 +190,57 @@ void requestLcdReinit() {
 // ==========================================
 // 8. HAM MO NAP THUNG RAC
 // ==========================================
+
 void openLid() {
 
   if (isLidOpen || !allowOpen) {
     return;
   }
+
   lidServo.write(LID_OPEN_ANGLE);
+
   digitalWrite(ledWhiteIn, HIGH);
+
   isLidOpen = true;
   waitingToClose = false;
+
   requestLcdReinit();
+
   Serial.println("LID OPENED");
 }
 
 // ==========================================
 // 9. HAM DONG NAP THUNG RAC
 // ==========================================
+
 void closeLid() {
+
   if (!isLidOpen) {
     return;
   }
+
   lidServo.write(LID_CLOSED_ANGLE);
+
   digitalWrite(ledWhiteIn, LOW);
+
   isLidOpen = false;
   waitingToClose = false;
+
   personDetected = false;
+
   personCount = 0;
   personClearCount = 0;
+
   allowOpen = false;
+
   lastLidClosedTime = millis();
+
   personSamples[0] = 999;
   personSamples[1] = 999;
   personSamples[2] = 999;
+
   requestLcdReinit();
+
   Serial.println("LID CLOSED - LOCKED");
 }
 
@@ -210,95 +248,143 @@ void closeLid() {
 // ==========================================
 // 10. HAM DOC CAM BIEN NGUOI
 // ==========================================
+
 void readPersonDistance() {
+
   int distance = readDistance(trigLid, echoLid);
   unsigned long now = millis();
+
+
   if (!allowOpen) {
+
     if (distance < 999) {
       personDistance = distance;
     }
+
+
     bool clearNow = (distance >= 999) || (distance >= personReleaseDist);
+
     if (clearNow) {
       personClearCount++;
     } else {
       personClearCount = 0;
     }
+
+
     if (personClearCount >= PERSON_CLEAR_COUNT || now - lastLidClosedTime >= unlockTimeout) {
+
       allowOpen = true;
+
       personDetected = false;
       personCount = 0;
       personClearCount = 0;
+
+
       for (int i = 0; i < 3; i++) {
         personSamples[i] = distance;
       }
       filteredPersonDistance = distance;
+
       lastPersonValidTime = now;
+
       Serial.println("SENSOR CLEAR - OPEN ENABLED");
     }
+
     return;
   }
+
   if (distance < 3 || distance >= 999) {
+
     if (now - lastPersonValidTime >= personInvalidTimeout) {
+
       personDetected = false;
       personCount = 0;
       personClearCount = 0;
     }
+
     return;
   }
+
   personDistance = distance;
   lastPersonValidTime = now;
+
   personSamples[sampleIndex] = distance;
+
   sampleIndex++;
+
   if (sampleIndex >= 3) {
     sampleIndex = 0;
   }
+
   for (int i = 0; i < 3; i++) {
+
     if (personSamples[i] == 999) {
       filteredPersonDistance = 999;
       return;
     }
   }
+
   filteredPersonDistance = getMedianDistance(
     personSamples[0],
     personSamples[1],
     personSamples[2]);
 
   if (filteredPersonDistance <= detectPersonDist) {
+
     personCount++;
     personClearCount = 0;
+
     if (personCount >= PERSON_DETECT_COUNT) {
+
       if (!personDetected) {
         Serial.println("PERSON DETECTED");
       }
+
       personDetected = true;
     }
   } else if (filteredPersonDistance >= personReleaseDist) {
+
     personClearCount++;
     personCount = 0;
+
     if (personClearCount >= PERSON_CLEAR_COUNT) {
+
       if (personDetected) {
         Serial.println("PERSON LEFT");
       }
+
       personDetected = false;
     }
   }
 }
+
 // ==========================================
 // 11. HAM DOC CAM BIEN DO MUC RAC
 // ==========================================
+
 void readTrashDistance() {
+
   int distance = readDistance(trigTrash, echoTrash);
+
+
   if (distance >= 999) {
     return;
   }
+
   trashDistance = distance;
+
+
   if (distance >= EMPTY_TRASH_DIST - TRASH_EMPTY_TOLERANCE) {
     trashDistanceFiltered = EMPTY_TRASH_DIST;
     trashPercent = 0;
   } else {
+
     distance = constrain(distance, FULL_TRASH_DIST, EMPTY_TRASH_DIST);
+
+
     trashDistanceFiltered =
       (trashDistanceFiltered + distance) / 2;
+
     trashPercent = map(
       trashDistanceFiltered,
       EMPTY_TRASH_DIST,
@@ -308,10 +394,12 @@ void readTrashDistance() {
 
     trashPercent = constrain(trashPercent, 0, 100);
   }
+
   if (!isTrashFull && trashPercent >= fullOn) {
     isTrashFull = true;
     Serial.println("TRASH FULL");
   }
+
   if (isTrashFull && trashPercent <= fullOff) {
     isTrashFull = false;
     Serial.println("TRASH NOT FULL");
@@ -321,33 +409,48 @@ void readTrashDistance() {
 // ==========================================
 // 12. HAM XU LY DONG MO NAP TU DONG
 // ==========================================
+
 void handleNormalMode(unsigned long now) {
+
   if (personDetected && allowOpen) {
+
     waitingToClose = false;
+
     if (!isLidOpen && now - lastLidClosedTime >= reopenLockTime) {
+
       openLid();
     }
+
     return;
   }
+
   if (isLidOpen) {
+
     if (!waitingToClose) {
+
       personLeftTime = now;
       waitingToClose = true;
+
       Serial.println("WAITING TO CLOSE");
     }
+
     if (now - personLeftTime >= closeDelay) {
       closeLid();
     }
   } else {
+
     waitingToClose = false;
+
     lidServo.write(LID_CLOSED_ANGLE);
   }
 }
 
 // ==========================================
-//12b. CHINH GOC SERVO QUA SERIAL MONITOR
+// 12b. CHINH GOC SERVO QUA SERIAL MONITOR
 // ==========================================
+
 void printAngles() {
+
   Serial.print("LID_CLOSED_ANGLE = ");
   Serial.print(LID_CLOSED_ANGLE);
   Serial.print(" | LID_OPEN_ANGLE = ");
@@ -355,9 +458,12 @@ void printAngles() {
 }
 
 void handleSerialTuning() {
+
   while (Serial.available() > 0) {
+
     char c = Serial.read();
     bool changed = false;
+
     if (c == '+') {
       LID_CLOSED_ANGLE = constrain(LID_CLOSED_ANGLE + 2, 0, 180);
       changed = true;
@@ -371,7 +477,10 @@ void handleSerialTuning() {
       LID_OPEN_ANGLE = constrain(LID_OPEN_ANGLE - 5, 0, 180);
       changed = true;
     }
+
     if (changed) {
+
+
       lidServo.write(isLidOpen ? LID_OPEN_ANGLE : LID_CLOSED_ANGLE);
       printAngles();
     }
@@ -381,28 +490,38 @@ void handleSerialTuning() {
 // ==========================================
 // 13. HAM DOC CAM BIEN ANH SANG LDR
 // ==========================================
+
 void readLDR() {
+
   ldrValue = analogRead(ldrPin);
+
   if (!isDark && ldrValue < darkOn) {
     isDark = true;
   }
+
   if (isDark && ldrValue > darkOff) {
     isDark = false;
   }
+
   digitalWrite(ledWhiteOut, isDark ? HIGH : LOW);
 }
 
 // ==========================================
 // 14. HAM CAP NHAT CHE DO HOAT DONG
 // ==========================================
+
 void updateMode() {
+
   int oldMode = mode;
+
   if (isTrashFull) {
     mode = 1;
   } else {
     mode = 0;
   }
+
   if (oldMode != mode) {
+
     Serial.print("MODE CHANGED: ");
     Serial.println(mode);
   }
@@ -411,84 +530,112 @@ void updateMode() {
 // ==========================================
 // 15. HAM DIEU KHIEN COI VA DEN BAO DAY RAC
 // ==========================================
+
 void handleBuzzer(unsigned long now) {
+
   if (mode == 1) {
+
     if (now - lastBuzzerTime >= buzzerInterval) {
+
       lastBuzzerTime = now;
+
       buzzerState = !buzzerState;
+
       digitalWrite(buzzerPin, buzzerState);
       digitalWrite(ledRed, buzzerState);
     }
   } else {
+
     buzzerState = false;
+
     digitalWrite(buzzerPin, LOW);
     digitalWrite(ledRed, LOW);
   }
 }
 
 // ==========================================
-// 16. HAM HIEN THI THONG TIN LEN LCD
+// 16. HAM HIEN THI THONG TIN LEN LCD 16x2
 // ==========================================
 void updateLCD(unsigned long now) {
+
   if (lcdNeedReinit && now - lcdReinitTime >= lcdReinitDelay) {
+
     lcdNeedReinit = false;
     lastLcdReinit = now;
+
     reinitLCD();
   }
+
   if (now - lastLcdReinit >= lcdReinitInterval) {
+
     lastLcdReinit = now;
+
     reinitLCD();
   }
+
   if (now - lastLcdTime < lcdInterval) {
     return;
   }
-  lastLcdTime = now;
-  lcd.setCursor(0, 0);
-  if (mode == 1) {
-    lcd.print("FULL! R:");
-  } else {
-    lcd.print("NORM  R:");
-  }
-  lcd.print(trashPercent);
-  lcd.print("%    ");
 
-  lcd.setCursor(0, 1);
-  if (isLidOpen) {
-    lcd.print("Lid:OPN ");
-  } else {
-    lcd.print("Lid:CLS ");
-  }
+  lastLcdTime = now;
+
+  char line[17];
+
+
+  snprintf(line, sizeof(line), "Trash:%3d%% %-5s",
+           trashPercent, (mode == 1) ? "FULL" : "OK");
+  lcd.setCursor(0, 0);
+  lcd.print(line);
+
+
+  const char* personText;
+
   if (!allowOpen) {
-    lcd.print("Wait    ");
+    personText = "Wait";
   } else if (personDetected) {
-    lcd.print("Detect  ");
+    personText = "Near";
   } else {
-    lcd.print("Ready   ");
+    personText = "Ready";
   }
+
+  snprintf(line, sizeof(line), "Lid:%-6s %-5s",
+           isLidOpen ? "OPEN" : "CLOSED", personText);
+  lcd.setCursor(0, 1);
+  lcd.print(line);
 }
 
 // ==========================================
 // 17. HAM XUAT THONG TIN SERIAL DEBUG
 // ==========================================
 void debugSerial(unsigned long now) {
+
   if (now - lastDebugTime < debugInterval) {
     return;
   }
+
   lastDebugTime = now;
+
   Serial.print("Mode: ");
   Serial.print(mode);
+
   Serial.print(" | TrashDist: ");
   Serial.print(trashDistance);
+
   Serial.print(" | Trash%: ");
   Serial.print(trashPercent);
+
   Serial.print(" | PersonDist: ");
   Serial.print(personDistance);
+
   Serial.print(" | Filtered: ");
   Serial.print(filteredPersonDistance);
+
   Serial.print(" | Person: ");
   Serial.print(personDetected ? "YES" : "NO");
+
   Serial.print(" | AllowOpen: ");
   Serial.print(allowOpen ? "YES" : "NO");
+
   Serial.print(" | Lid: ");
   Serial.println(isLidOpen ? "OPEN" : "CLOSED");
 }
@@ -497,32 +644,49 @@ void debugSerial(unsigned long now) {
 // 18. HAM KHOI TAO HE THONG (SETUP)
 // ==========================================
 void setup() {
+
   Serial.begin(9600);
+
   pinMode(trigLid, OUTPUT);
   pinMode(echoLid, INPUT);
+
   pinMode(trigTrash, OUTPUT);
   pinMode(echoTrash, INPUT);
+
   pinMode(buzzerPin, OUTPUT);
   pinMode(ledRed, OUTPUT);
+
   pinMode(ledWhiteOut, OUTPUT);
   pinMode(ledWhiteIn, OUTPUT);
+
   pinMode(ldrPin, INPUT);
+
   lidServo.attach(servoPin);
+
   lidServo.write(LID_CLOSED_ANGLE);
+
   lcd.init();
   lcd.backlight();
+
   lcd.setCursor(0, 0);
   lcd.print("SMART TRASH BIN ");
+
   lcd.setCursor(0, 1);
   lcd.print("STARTING...     ");
+
   digitalWrite(buzzerPin, LOW);
   digitalWrite(ledRed, LOW);
   digitalWrite(ledWhiteOut, LOW);
   digitalWrite(ledWhiteIn, LOW);
+
   lastPersonValidTime = millis();
+
   delay(1000);
+
   lcd.clear();
+
   lastLcdReinit = millis();
+
   Serial.println("SMART TRASH BIN STARTED");
   Serial.println("Chinh goc nap: '+'/'-' = goc dong, 'o'/'l' = goc mo");
   printAngles();
@@ -532,25 +696,42 @@ void setup() {
 // 19. HAM VONG LAP CHINH (LOOP)
 // ==========================================
 void loop() {
+
   unsigned long now = millis();
-  handleSerialTuning();  // [SUA] chinh goc servo qua Serial
+
+  handleSerialTuning();
+
   if (now - lastSensorTime >= sensorInterval) {
+
     lastSensorTime = now;
+
     if (sensorTurn == 0) {
+
       readPersonDistance();
+
       sensorTurn = 1;
     } else {
+
       readTrashDistance();
+
       sensorTurn = 0;
     }
   }
+
   if (now - lastLdrTime >= ldrInterval) {
+
     lastLdrTime = now;
+
     readLDR();
   }
+
   updateMode();
+
   handleNormalMode(now);
+
   handleBuzzer(now);
+
   updateLCD(now);
+
   debugSerial(now);
 }
